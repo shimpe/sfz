@@ -1,0 +1,99 @@
+// maybe useful - better versions welcome!
+(
+// return a list of strings constructed by splitting the string argument
+// at the regex
+var split_regex = {
+    | string, regex |
+    var allregexp = string.findAllRegexp(regex);
+    var startpos = 0;
+    var result = [];
+    allregexp.do {
+        | pos |
+        var match = string.findRegexpAt(regex, pos);
+        var matchlength = match[1];
+        result = result.add(string.copyRange(startpos, pos-1));
+        startpos = pos + matchlength;
+    };
+    if (startpos < string.size) {
+        result = result.add(string.copyRange(startpos, string.size-1));
+    };
+    result;
+};
+
+// return a string constructed by replacing the regex occurrences with
+// replacement
+var replace_regex = {
+    | string, regex, replacement |
+    var allregexp = string.findAllRegexp(regex);
+    var startpos = 0;
+    var result = "";
+    allregexp.do {
+        | pos |
+        var match = string.findRegexpAt(regex, pos);
+        var matchlength = match[1];
+        result = result ++ (string.copyRange(startpos, pos-1) ++ replacement);
+        startpos = pos + matchlength;
+    };
+    if (startpos < string.size) {
+        result = result ++ string.copyRange(startpos, string.size-1);
+    };
+    result;
+};
+
+// a few tests
+var split_scenarios = [
+    [["jan, piet, joris en corneel die hebben baarden die varen mee", "en "], [ "jan, piet, joris ", "corneel die hebb", "baard", "die var", "mee"]],
+    [["Twelve:12 Eighty nine:89.", "\\d+"], ["Twelve:", " Eighty nine:", "."]],
+    [["apple", "banana"], ["apple"]],
+    [["apple","apple"],[""]],
+    [["","apple"],[]],
+    [["appple", "pp"], ["a", "ple"]],
+    [["pastabolognese", "banana"], ["pastabolognese"]],
+    [["pastabolognese", "b.+g"], ["pasta", "nese"]],
+];
+
+var replace_scenarios = [
+    [["apple", "apple", "banana"], "banana"],
+    [["apples", "apple", "banana"], "bananas"],
+    [["please contact support", "contact", "ignore"], "please ignore support"],
+    [["12-03-2019", "\\d+", "xx"], "xx-xx-xx"],
+    [["12-03-2019", "\\d", "xx"], "xxxx-xxxx-xxxxxxxx"],
+    [["apple", "pear", "banana"], "apple"],
+    [["appple", "pp", "cc"],"accple"]
+];
+
+
+// test some cases of splitting on regex
+split_scenarios.do {
+    | scenario |
+    var input = scenario[0];
+    var expected = scenario[1];
+    var input_string = input[0];
+    var input_regex = input[1];
+    var result = split_regex.(input_string, input_regex);
+    if (result == expected) {
+        ("successfully split into " ++ result.asCompileString).postln;
+    } {
+        ("failed to split " ++ input_string.asCompileString ++ " using regex " ++ input_regex.asCompileString).warn;
+        ("expected: " ++ expected.asCompileString ++ "; got " ++ result.asCompileString).warn;
+    }
+};
+
+// test some cases of replacing regex
+replace_scenarios.do {
+    | scenario |
+    var inputs = scenario[0];
+    var output = scenario[1];
+    var string = inputs[0];
+    var regex = inputs[1];
+    var replacement = inputs[2];
+    var result = replace_regex.(string, regex, replacement);
+    if (result.compare(output) == 0) {
+        ("successfully replaced " ++ regex.asCompileString ++ " with " ++ replacement.asCompileString ++ " in " ++ string.asCompileString ++ " to get " ++ result.asCompileString).postln;
+    } {
+        ("failed to successfully replace " ++ regex.asCompileString ++ " with " ++ replacement.asCompileString).warn;
+        ("expected: " ++ output.asCompileString ++ " got " ++ result.asCompileString).warn;
+    }
+};
+
+)

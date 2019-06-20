@@ -1,0 +1,21 @@
+<group>
+ampeg_attack=0.04 ampeg_release=0.45
+
+<region> sample=trumpet_pp_c4.wav key=c4
+<region> sample=trumpet_pp_c#4.wav key=c#4
+<region> sample=trumpet_pp_d4.wav key=d4
+<region> sample=trumpet_pp_d#4.wav key=d#4
+
+<group>
+lovel=60
+<region> sample=trumpet_pp_e4.wav key=e4 // previous group parameters reset
+
+//Comments
+//Comment lines can be inserted anywhere inside the file. A comment line starts with the slash character ('/'), and it extends till the end of the line.
+
+<region> 
+sample=trumpet_pp_c4.wav
+// middle C in the keyboard
+lokey=60
+// pianissimo layer
+lovel=0 hivel=20 // another comment

@@ -1,0 +1,11 @@
+(
+  name: "sfz",
+  summary: "sfz soundfont reader",
+  version: "1.0",
+  schelp: "sfz.schelp",
+  dependencies: ["https://github.com/shimpe/scstringext"],
+  license: "GNU GPL v3.0",
+  copyright: "shimpe",
+  ext_dependency: "",
+  url: "https://github.com/shimpe/sfz"
+)
