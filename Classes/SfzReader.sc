@@ -1,62 +1,183 @@
 SfzReader {
+    classvar <regex_ws = "[ \t\r\n]+";
+    classvar <regex_comment = "//[^\r\n]*\r?\n";
+
+    var <>id;
     var <>path;
     var <>filecontents;
-    var <>groups;
+    var <>control;
+    var <>sfzdata;
+    var <>synths;
+    var <>buffers;
+
 
     *new {
-        ^super.new.init();
+        | id = "rdr" |
+        ^super.new.init(id);
     }
 
     init {
+        | id |
+        this.id = id;
         this.path = "";
         this.filecontents = "";
-        this.groups = ();
+        this.sfzdata = ();
+        this.synths = [];
+        this.buffers = ();
+    }
+
+    freeMemory {
+        this.synths.do({ | synth | synth.free; });
+        this.synths = [];
+        this.buffers.do({ | buffer | buffer.free; });
+        this.buffers = [];
     }
 
     load {
-        | path |
-        this.pr_loadfile(path);
-        this.pr_parsecontents;
+        | server, path |
+        ("load file" + path).postln;
+        this.pr_loadFile(path);
+        ("parse contents").postln;
+        this.pr_parseContents;
+        ("create synthdefs").postln;
+        this.pr_createSynthDefs;
+        ("load buffers").postln;
+        this.pr_loadBuffers(server);
+        ("sync").postln;
+        server.sync;
+        this.buffers.debug("buffers");
         ^this.filecontents;
     }
 
-    get_property {
-        | groupid, regionid, property |
+    play {
+        | out, freq, amp |
+        var noteregions = this.pr_getActiveRegions(freq, amp).debug("regions");
+        noteregions.do({
+            | el |
+            var refnote = el[0];
+            var region = el[1];
+            var buf = this.buffers[region];
+            var chan = buf.numChannels;
+            Synth((this.id ++ "playbuf" ++ chan.clip(1,2)).asSymbol.debug("synthdef"),
+                [\out, out,
+                    \bufnum, buf.bufnum,
+                    \amp, amp,
+                    \gate, 1,
+                    \rate, ((freq.cpsmidi)-(refnote.asInteger)).midiratio.debug("ratio")]);
+        });
+    }
+
+    getProperty {
+        | masterid, groupid, regionid, property, defaultifmissing=nil |
+        masterid = masterid.asSymbol;
         groupid = groupid.asSymbol;
         regionid= regionid.asSymbol;
-        if (this.groups[groupid].isNil) {
-            ^nil;
+        if (this.sfzdata[\0].isNil) {
+            ^defaultifmissing;
         };
-        if (this.groups[groupid][regionid].isNil) {
+        if (this.sfzdata[\0][masterid].isNil) {
+            masterid = \0;
+        };
+        if (this.sfzdata[\0][masterid].isNil) {
+            ^defaultifmissing;
+        };
+        if (this.sfzdata[\0][masterid][groupid].isNil) {
+            groupid = \0;
+        };
+        if (this.sfzdata[\0][masterid][groupid].isNil) {
+            ^defaultifmissing;
+        };
+        if (this.sfzdata[\0][masterid][groupid][regionid].isNil) {
             regionid = \0;
         };
-        if (this.groups[groupid][regionid].isNil) {
-            ^nil;
+        if (this.sfzdata[\0][masterid][groupid][regionid].isNil) {
+            ^defaultifmissing;
         };
-        if (this.groups[groupid][regionid][property].isNil) {
-            if (this.groups[groupid][\0][property].isNil) {
-                ^nil;
+        if (this.sfzdata[\0][masterid][groupid][regionid][property].isNil) {
+            if (this.sfzdata[\0][masterid][groupid][\0][property].isNil) {
+                ^defaultifmissing;
             } {
-                ^this.groups[groupid][\0][property];
+                ^this.sfzdata[\0][masterid][groupid][\0][property];
             };
         } {
-            ^this.groups[groupid][regionid][property];
+            ^this.sfzdata[\0][masterid][groupid][regionid][property];
         };
     }
 
-    list_properties {
-        | groupid, regionid |
-        var result, result2;
+    listProperties {
+        | masterid, groupid, regionid |
+        var result, result2, result3;
+        masterid = masterid.asSymbol;
         groupid = groupid.asSymbol;
         regionid = regionid.asSymbol;
-        result = this.groups[groupid][\0];
-        result2 = this.groups[groupid][regionid];
-        ^result.merge(result2, { | e1, e2 | e2; });
+        result = this.sfzdata[\0][masterid][\0][\0];
+        result2 = this.sfzdata[\0][masterid][groupid][\0];
+        result3 = this.sfzdata[\0][masterid][groupid][regionid];
+        ^result.merge(result2, { | e1, e2 | e2; }).merge(result3, { | e1, e2 | e2; });
     }
 
     // private methods
+    pr_getActiveRegions {
+        | freq, amp |
+        // todo extend with more parameters
+        var velocity = (amp*127).clip(0,127);
+        var midinote = freq.cpsmidi;
+        var active_keys = [];
+        this.sfzdata.keys.do({
+            | globalid |
+            this.sfzdata[globalid].keys.do({
+                | masterid |
+                this.sfzdata[globalid][masterid].keys.do({
+                    | groupid |
+                    this.sfzdata[globalid][masterid][groupid].keys.do({
+                        | regionid |
+                        var vel = this.getProperty(masterid, groupid, regionid, \vel, nil);
+                        var lovel = this.getProperty(masterid, groupid, regionid, \lovel, 0);
+                        var hivel = this.getProperty(masterid, groupid, regionid, \hivel, 127);
+                        var key = this.getProperty(masterid, groupid, regionid, \key, nil);
+                        var lokey = this.getProperty(masterid, groupid, regionid, \lokey, 0);
+                        var hikey = this.getProperty(masterid, groupid, regionid, \hikey, 127);
+                        var pitch_keycenter = this.getProperty(masterid, groupid, regionid, \pitch_keycenter, nil);
+                        var velOk = false;
+                        var noteOk = false;
+                        var sampleOk = false;
+                        var buffnote = nil;
+                        if (vel.notNil && (velocity == vel)) {
+                            velOk = true;
+                        } {
+                            if (vel.isNil && hivel.notNil && lovel.notNil) {
+                                if ((velocity <= hivel) && (velocity >= lovel)) {
+                                    velOk = true;
+                                };
+                            };
+                        };
+                        if (key.notNil) {
+                            if ((midinote.round(1).asInteger == key.asInteger)) {
+                                noteOk = true;
+                                buffnote = key;
+                            };
+                        } {
+                            if (key.isNil && hikey.notNil && lokey.notNil) {
+                                if ((midinote <= hikey) && (midinote >= lokey)) {
+                                    noteOk = true;
+                                    buffnote = pitch_keycenter ? 440.cpsmidi;
+                                };
+                            };
+                        };
+                        if (noteOk.and(velOk)) {
+                            var lookupkey = (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol;
+                            if (this.getProperty(masterid, groupid, regionid, \sample, nil).notNil) {
+                                active_keys = active_keys.add([buffnote, lookupkey]);
+                            };
+                        };
+                    });
+                });
+            });
+        });
+        ^active_keys;
+    }
 
-    pr_loadfile {
+    pr_loadFile {
         | path |
         this.path = path;
         this.filecontents = File.readAllString(path);
@@ -66,58 +187,187 @@ SfzReader {
     pr_removeComments {
         | string |
         var result;
-        result = string.replaceRegex("//[^\n]*\n", "");
+        result = string.replaceRegex(SfzReader.regex_comment, "");
         ^result;
+    }
+
+    pr_compressMultiWhitespace {
+        | string |
+        ^string.replaceRegex(SfzReader.regex_ws, " ");
     }
 
     pr_removeMultiWhitespace {
         | string |
-        ^string.replaceRegex("[ \t\n]+", " ");
+        ^string.replaceRegex(SfzReader.regex_ws, "");
     }
 
     pr_removeEmpties {
         | list |
-        ^list.removeAllSuchThat({ |el| el.compare("") != 0 });
+        ^list.removeAllSuchThat({ |el| this.pr_removeMultiWhitespace(el).compare("") != 0; });
     }
 
-    pr_parsecontents {
+    pr_parseContents {
         var groupid = 0;
         var regionid = 0;
-        var groups;
-        var groups_clean;
-        // cleanup rests of previous parsing
-        this.groups = ();
-
+        var globals,globals_clean;
+        var control_properties;
+        var control_section;
+        var filecontents = this.filecontents;
         // cleanup file contents: remove comments and replace many whitespace with single space
-        this.filecontents = this.pr_removeMultiWhitespace(this.pr_removeComments(this.filecontents));
+        filecontents = this.pr_compressMultiWhitespace(this.pr_removeComments(filecontents));
+        // split off <control> from the rest
+        this.control = ();
+        control_section = filecontents.betweenRegex("<control>", "<", 0, 1);
+        if (control_section.notNil) {
+            var cutpos;
+            control_properties = this.pr_removeEmpties(control_section.split($ ));
+            control_properties.do({
+                | cprop_contents, cpropid |
+                var keyval = cprop_contents.split($=);
+                if (keyval[1].notNil) {
+                    if (keyval[1].stripWhiteSpace.compare("") != 0) {
+                        this.control[keyval[0].asSymbol] = keyval[1].stripWhiteSpace;
+                    }
+                };
+            });
+            cutpos = filecontents.betweenRegexPos("<control>", "<", 0, 1);
+            filecontents = filecontents.copyRange(cutpos[1], filecontents.size-1);
+        };
 
-        // split on <group>
-        groups = this.filecontents.splitRegex("<group>");
-        groups_clean = this.pr_removeEmpties(groups);
-        //groups_clean.debug("groups clean");
-        groups_clean.do({
-            | contents, groupid |
-            var regions, regions_clean;
-            this.groups[groupid.asSymbol] = ();
-            //contents.debug("contents");
-            regions = contents.splitRegex("<region>");
-            regions_clean = this.pr_removeEmpties(regions);
-            //regions_clean.debug("regions clean");
-            regions_clean.do({
-                | regioncontents, regionid |
-                var properties;
-                this.groups[groupid.asSymbol][regionid.asSymbol] = ();
-                properties = this.pr_removeEmpties(regioncontents.split($ ));
-                //properties.debug("properties for group"+groupid+"and region"+regionid);//properties.debug("properties for group"+groupid+"and region"+regionid);
-                properties.do({
-                    | propertycontents, propertyid |
-                    var keyval = propertycontents.split($=);
-                    this.groups[groupid.asSymbol][regionid.asSymbol][keyval[0].asSymbol] = keyval[1];
+        // cleanup rests of previous parsing
+        this.sfzdata = ();
+        // split on <global>
+        globals = filecontents.splitRegex("<global>");
+        globals_clean = this.pr_removeEmpties(globals);
+        globals_clean.do({
+            | filecontents, globalid |
+            var masters, masters_clean;
+            this.sfzdata[globalid.asSymbol] = ();
+            // split on <master>
+            masters = filecontents.splitRegex("<master>");
+            masters_clean = this.pr_removeEmpties(masters);
+            masters_clean.do({
+                | filecontents, masterid |
+                var groups, groups_clean;
+                this.sfzdata[globalid.asSymbol][masterid.asSymbol] = ();
+                // split on <group>
+                groups = filecontents.splitRegex("<group>");
+                groups_clean = this.pr_removeEmpties(groups);
+                groups_clean.do({
+                    | contents, groupid |
+                    var regions, regions_clean;
+                    this.sfzdata[globalid.asSymbol][masterid.asSymbol][groupid.asSymbol] = ();
+                    // split on <region>
+                    regions = contents.splitRegex("<region>");
+                    regions_clean = this.pr_removeEmpties(regions);
+                    regions_clean.do({
+                        | regioncontents, regionid |
+                        var properties;
+                        this.sfzdata[globalid.asSymbol][masterid.asSymbol][groupid.asSymbol][regionid.asSymbol] = ();
+                        // split on whitespace
+                        properties = this.pr_removeEmpties(regioncontents.split($ ));
+                        properties.do({
+                            | propertycontents, propertyid |
+                            var keyval = propertycontents.split($=);
+                            if (keyval[1].notNil) {
+                                if (keyval[1].stripWhiteSpace.compare("") != 0) {
+                                    this.sfzdata[globalid.asSymbol][masterid.asSymbol][groupid.asSymbol][regionid.asSymbol][keyval[0].asSymbol] = keyval[1].stripWhiteSpace;
+                                };
+                            } {
+                                keyval.debug("not sure what to do with this weird keyval");
+                            };
+                        });
+                    });
                 });
             });
         });
 
-        ^this.groups;
+        ^this.sfzdata;
+    }
+
+    pr_createSynthDefs {
+        SynthDef((this.id++"playbuf1").asSymbol, {
+            | out=0, bufnum=(1.neg), gate=0, rate=1, offset=0, stloop=0, endloop=0, amp=0.5, volume=0, pan=0, xf=1,
+            ampeg_start=0, ampeg_delay=0, ampeg_attack=0.01, ampeg_sustain=1, ampeg_decay=0.01, ampeg_release=1,
+            ampeg_vel2delay=0, ampeg_vel2attack=0, ampeg_vel2sustain=0, ampeg_vel2decay=0, ampeg_vel2release=0,
+            ampeg_hold=0, ampeg_vel2hold=0 |
+            var envspec = Env.dadsr(delayTime:ampeg_delay, attackTime:ampeg_attack+(ampeg_vel2attack*amp),
+                decayTime:ampeg_decay+(ampeg_vel2decay*amp), sustainLevel:ampeg_sustain+(ampeg_vel2sustain*amp),
+                releaseTime:ampeg_release+(ampeg_vel2release*amp), peakLevel:volume.dbamp);
+            var env = EnvGen.ar(envspec, doneAction:Done.freeSelf);
+            var sig = Pan2.ar(PlayBuf.ar(1, bufnum, BufRateScale.kr(bufnum)*rate, 1, offset, 0, 0)*env*amp*volume.dbamp*xf, pan);
+            Out.ar(out, sig);
+        }).add;
+        this.synths = this.synths.add((this.id++"playbuf1").asSymbol);
+
+        SynthDef((this.id++"loopbuf1").asSymbol, {
+            | out=0, bufnum=(1.neg), gate=0, rate=1, offset=0, stloop=0, endloop=0, amp=0.5, volume=0, pan=0, xf=1,
+            ampeg_start=0, ampeg_delay=0, ampeg_attack=0.01, ampeg_sustain=1, ampeg_decay=0.01, ampeg_release=1,
+            ampeg_vel2delay=0, ampeg_vel2attack=0, ampeg_vel2sustain=0, ampeg_vel2decay=0, ampeg_vel2release=0,
+            ampeg_hold=0, ampeg_vel2hold=0 |
+            var envspec = Env.dadsr(delayTime:ampeg_delay, attackTime:ampeg_attack+(ampeg_vel2attack*amp),
+                decayTime:ampeg_decay+(ampeg_vel2decay*amp), sustainLevel:ampeg_sustain+(ampeg_vel2sustain*amp),
+                releaseTime:ampeg_release+(ampeg_vel2release*amp), peakLevel:volume.dbamp);
+            var env = EnvGen.ar(envspec, gate:gate, doneAction:Done.freeSelf);
+            var sig = Pan2.ar(LoopBuf.ar(1,bufnum,BufRateScale.kr(bufnum)*rate,1,offset,stloop,endloop)*env*amp*volume.dbamp*xf, pan);
+            Out.ar(out, sig);
+        }).add;
+        this.synths = this.synths.add((this.id++"loopbuf1").asSymbol);
+
+        SynthDef((this.id++"playbuf2").asSymbol, {
+            | out=0, bufnum=(1.neg), gate=0, rate=1, offset=0, stloop=0, endloop=0, amp=0.5, volume=0, pan=0, xf=1,
+            ampeg_start=0, ampeg_delay=0, ampeg_attack=0.01, ampeg_sustain=1, ampeg_decay=0.01, ampeg_release=1,
+            ampeg_vel2delay=0, ampeg_vel2attack=0, ampeg_vel2sustain=0, ampeg_vel2decay=0, ampeg_vel2release=0,
+            ampeg_hold=0, ampeg_vel2hold=0 |
+            var envspec = Env.dadsr(delayTime:ampeg_delay, attackTime:ampeg_attack+(ampeg_vel2attack*amp),
+                decayTime:ampeg_decay+(ampeg_vel2decay*amp), sustainLevel:ampeg_sustain+(ampeg_vel2sustain*amp),
+                releaseTime:ampeg_release+(ampeg_vel2release*amp), peakLevel:volume.dbamp);
+            var env = EnvGen.ar(envspec, gate:gate, doneAction:Done.freeSelf);
+            var bufplay = PlayBuf.ar(2,bufnum,BufRateScale.kr(bufnum)*rate,1,offset,0, 0)*env*amp*volume.dbamp*xf;
+            var sig = Balance2.ar(bufplay[0], bufplay[1], pan);
+            Out.ar(out, sig);
+        }).add;
+        this.synths = this.synths.add((this.id++"playbuf2").asSymbol);
+
+        SynthDef((this.id++"loopbuf2").asSymbol, {
+            | out=0, bufnum=(1.neg), gate=0, rate=1, offset=0, stloop=0, endloop=0, amp=0.5, volume=0, pan=0, xf=1,
+            ampeg_start=0, ampeg_delay=0, ampeg_attack=0.01, ampeg_sustain=1, ampeg_decay=0.01, ampeg_release=1,
+            ampeg_vel2delay=0, ampeg_vel2attack=0, ampeg_vel2sustain=0, ampeg_vel2decay=0, ampeg_vel2release=0,
+            ampeg_hold=0, ampeg_vel2hold=0 |
+            var envspec = Env.dadsr(delayTime:ampeg_delay, attackTime:ampeg_attack+(ampeg_vel2attack*amp),
+                decayTime:ampeg_decay+(ampeg_vel2decay*amp), sustainLevel:ampeg_sustain+(ampeg_vel2sustain*amp),
+                releaseTime:ampeg_release+(ampeg_vel2release*amp), peakLevel:volume.dbamp);
+            var env = EnvGen.ar(envspec, doneAction:Done.freeSelf);
+            var bufplay = LoopBuf.ar(2,bufnum,BufRateScale.kr(bufnum)*rate,1,offset,stloop,endloop)*env*amp*volume.dbamp*xf;
+            var sig = Balance2.ar(bufplay[0], bufplay[1], pan);
+            Out.ar(out, sig);
+        }).add;
+        this.synths = this.synths.add((this.id++"loopbuf2").asSymbol);
+    }
+
+    pr_loadBuffers {
+        | server |
+        "about to load".postln;
+        this.buffers = ();
+        this.sfzdata.keys.do({
+            |globalid|
+            this.sfzdata[globalid].keys.do({
+                | masterid |
+                this.sfzdata[globalid][masterid].keys.do({
+                    | groupid|
+                    this.sfzdata[globalid][masterid][groupid].keys.do({
+                        |regionid|
+                        var samplepath = this.getProperty(masterid, groupid, regionid, \sample);
+                        if (samplepath.notNil) {
+                            var buf;
+                            samplepath = samplepath.replace("\\", "/");
+                            buf = Buffer.read(server, (PathName(this.path).pathOnly +/+ samplepath).debug("Loading"));
+                            this.buffers[ (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol ] = buf;
+                        };
+                    });
+                });
+            });
+        });
     }
 }
 
