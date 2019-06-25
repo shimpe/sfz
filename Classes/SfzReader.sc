@@ -50,21 +50,57 @@ SfzReader {
     }
 
     play {
-        | out, freq, amp, dur |
-        var noteregions = this.pr_getActiveRegions(freq, amp).debug("regions");
+        | out=0, freq=440, amp=0.5, dur=1, legato=0.9 |
+        var noteregions = this.pr_getActiveRegions(freq, amp);
         noteregions.do({
             | el |
             var refnote = el[0];
             var region = el[1];
+            var keyelements = el[2];
+            var masterid = keyelements[0];
+            var groupid = keyelements[1];
+            var regionid = keyelements[2];
             var buf = this.buffers[region];
+
+            var pan = this.getProperty(masterid, groupid, regionid, \pan, 0).asInteger/100.0;
+            var xf=1;
+            var ampeg_start = this.getProperty(masterid, groupid, regionid, \ampeg_start, 0).asFloat;
+            var ampeg_delay = this.getProperty(masterid, groupid, regionid, \ampeg_delay, 0).asFloat;
+            var ampeg_attack = this.getProperty(masterid, groupid, regionid, \ampeg_attack, 0.001).asFloat;
+            var ampeg_sustain = this.getProperty(masterid, groupid, regionid, \ampeg_sustain, 1).asFloat;
+            var ampeg_decay = this.getProperty(masterid, groupid, regionid, \ampeg_decay, 0.01).asFloat;
+            var ampeg_release = this.getProperty(masterid, groupid, regionid, \ampeg_release, 0.01).asFloat;
+            var ampeg_vel2delay = this.getProperty(masterid, groupid, regionid, \ampeg_vel2delay, 0).asFloat;
+            var ampeg_vel2attack = this.getProperty(masterid, groupid, regionid, \ampeg_vel2attack, 0).asFloat;
+            var ampeg_vel2sustain = this.getProperty(masterid, groupid, regionid, \ampeg_vel2sustain, 0).asFloat;
+            var ampeg_vel2decay = this.getProperty(masterid, groupid, regionid, \ampeg_vel2decay, 0).asFloat;
+            var ampeg_vel2release = this.getProperty(masterid, groupid, regionid, \ampeg_vel2release, 0).asFloat;
+            var ampeg_vel2hold = this.getProperty(masterid, groupid, regionid, \ampeg_vel2hold, 0).asFloat;
+
             var chan = buf.numChannels;
-            Synth((this.id ++ "playbuf" ++ chan.clip(1,2)).asSymbol.debug("synthdef"),
+
+            Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
                 [\out, out,
                     \bufnum, buf.bufnum,
                     \amp, amp,
+                    \xf, this.pr_calcXf(masterid, groupid, regionid, freq, amp),
                     \gate, 1,
-                    \ampeg_hold, dur,
-                    \rate, ((freq.cpsmidi)-(refnote.asInteger)).midiratio.debug("ratio")]);
+                    \pan, pan,
+                    \ampeg_hold, (dur*legato),
+                    \rate, ((freq.cpsmidi)-(refnote.asInteger)).midiratio,
+                    \ampeg_start, ampeg_start,
+                    \ampeg_delay, ampeg_delay,
+                    \ampeg_attack, ampeg_attack,
+                    \ampeg_sustain, ampeg_sustain,
+                    \ampeg_decay, ampeg_decay,
+                    \ampeg_release, ampeg_release,
+                    \ampeg_vel2delay, ampeg_vel2delay,
+                    \ampeg_vel2attack, ampeg_vel2attack,
+                    \ampeg_vel2sustain, ampeg_vel2sustain,
+                    \ampeg_vel2decay, ampeg_vel2decay,
+                    \ampeg_vel2release, ampeg_vel2release,
+                    \ampeg_vel2hold, ampeg_vel2hold]);
+
         });
     }
 
@@ -118,11 +154,44 @@ SfzReader {
     }
 
     // private methods
+    pr_eqPower {
+        | x, l, h |
+        ^sqrt(((x-l)/(h-l)).clip(0,1));
+    }
+
+    pr_calcXf {
+        | masterid, groupid, regionid, freq, amp |
+        var vel = amp*127;
+        var xfv = 1;
+        var inlovel = this.getProperty(masterid, groupid, regionid, \xfin_lovel, nil);
+        var inhivel = this.getProperty(masterid, groupid, regionid, \xfin_hivel, nil);
+        var outlovel = this.getProperty(masterid, groupid, regionid, \xfout_lovel, nil);
+        var outhivel = this.getProperty(masterid, groupid, regionid, \xfout_hivel, nil);
+        var xfn = 1;
+        var inlokey = this.getProperty(masterid, groupid, regionid, \xfin_lokey, nil);
+        var inhikey = this.getProperty(masterid, groupid, regionid, \xfin_hikey, nil);
+        var outlokey = this.getProperty(masterid, groupid, regionid, \xfout_lokey, nil);
+        var outhikey = this.getProperty(masterid, groupid, regionid, \xfout_hikey, nil);
+        if (inlovel.notNil && inhivel.notNil) {
+            xfv = xfv*this.pr_eqPower(vel, inlovel, inhivel);
+        };
+        if (outlovel.notNil && outhivel.notNil) {
+            xfv = xfv*this.pr_eqPower(vel, outlovel, outhivel);
+        };
+        if (inlokey.notNil && inhikey.notNil) {
+            xfn = xfn*this.pr_eqPower(vel, inlokey, inhikey);
+        };
+        if (outlokey.notNil && outhikey.notNil) {
+            xfn = xfn*this.pr_eqPower(vel, outlokey, outhikey);
+        };
+        ^(xfv*xfn);
+    }
+
     pr_getActiveRegions {
         | freq, amp |
         // todo extend with more parameters
         var velocity = (amp*127).clip(0,127);
-        var midinote = freq.cpsmidi.debug("\n\nNEW REGION\nmidinote");
+        var midinote = freq.cpsmidi;
         var active_keys = [];
         this.sfzdata.keys.do({
             | globalid |
@@ -136,8 +205,8 @@ SfzReader {
                         var lovel = this.getProperty(masterid, groupid, regionid, \lovel, 0);
                         var hivel = this.getProperty(masterid, groupid, regionid, \hivel, 127);
                         var key = this.getProperty(masterid, groupid, regionid, \key, nil);
-                        var lokey = this.getProperty(masterid, groupid, regionid, \lokey, nil).debug("lokey");
-                        var hikey = this.getProperty(masterid, groupid, regionid, \hikey, nil).debug("hikey");
+                        var lokey = this.getProperty(masterid, groupid, regionid, \lokey, nil);
+                        var hikey = this.getProperty(masterid, groupid, regionid, \hikey, nil);
                         var pitch_keycenter = this.getProperty(masterid, groupid, regionid, \pitch_keycenter, nil);
                         var velOk = false;
                         var noteOk = false;
@@ -156,23 +225,19 @@ SfzReader {
                             if ((midinote.round(1).asInteger == key.asInteger)) {
                                 noteOk = true;
                                 buffnote = key;
-                                key.debug("key not nil");
                             };
                         } {
                             if (key.isNil && hikey.notNil && lokey.notNil) {
                                 if ((midinote.floor <= hikey) && (midinote.ceil >= lokey)) {
                                     noteOk = true;
                                     buffnote = pitch_keycenter ? 440.cpsmidi;
-                                    lokey.debug("lokey not nil");
-                                    hikey.debug("hikey not nil");
-                                    pitch_keycenter.debug("pitch_keycenter");
                                 };
                             };
                         };
                         if (noteOk.and(velOk)) {
                             var lookupkey = (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol;
                             if (this.getProperty(masterid, groupid, regionid, \sample, nil).notNil) {
-                                active_keys = active_keys.add([buffnote, lookupkey]);
+                                active_keys = active_keys.add([buffnote, lookupkey, [masterid, groupid, regionid]]);
                             };
                         };
                     });
