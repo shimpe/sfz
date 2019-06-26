@@ -79,7 +79,7 @@ SfzReader {
 
             var chan = buf.numChannels;
 
-            Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
+            var synth = Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
                 [\out, out,
                     \bufnum, buf.bufnum,
                     \amp, amp,
@@ -100,6 +100,7 @@ SfzReader {
                     \ampeg_vel2decay, ampeg_vel2decay,
                     \ampeg_vel2release, ampeg_vel2release,
                     \ampeg_vel2hold, ampeg_vel2hold]);
+            SystemClock.sched((dur*legato), { synth.set(\gate, 0); });
 
         });
     }
@@ -361,10 +362,12 @@ SfzReader {
             ampeg_start=0, ampeg_delay=0, ampeg_attack=0.01, ampeg_sustain=1, ampeg_decay=0.01, ampeg_release=1,
             ampeg_vel2delay=0, ampeg_vel2attack=0, ampeg_vel2sustain=0, ampeg_vel2decay=0, ampeg_vel2release=0,
             ampeg_hold=0, ampeg_vel2hold=0 |
-            var envspec = Env(
-                levels:[0,0,ampeg_start,1,1,(ampeg_sustain+(ampeg_vel2sustain*amp))*0.01,0],
-                times:[ampeg_delay+(ampeg_vel2delay*amp), 0, ampeg_attack+(ampeg_vel2attack*amp), ampeg_hold+(ampeg_vel2hold*amp), ampeg_decay+(ampeg_vel2decay*amp), ampeg_release + (ampeg_vel2release*amp)],
-                curve:5);
+            var envspec = Env.dadsr(delayTime:(ampeg_delay + (ampeg_vel2delay*amp)),
+                attackTime:(ampeg_attack + (ampeg_vel2attack*amp)),
+                decayTime:(ampeg_decay + (ampeg_vel2decay*amp)),
+                sustainLevel:(ampeg_sustain + (ampeg_vel2sustain*amp)),
+                releaseTime:(ampeg_release + (ampeg_vel2release*amp))
+            );
             var env = EnvGen.ar(envspec, gate:gate, doneAction:Done.freeSelf);
             var sig = Pan2.ar(PlayBuf.ar(1, bufnum, BufRateScale.kr(bufnum)*rate, 1, offset, 0, 0)*env*amp*volume.dbamp*xf, pan);
             Out.ar(out, sig);
@@ -376,10 +379,12 @@ SfzReader {
             ampeg_start=0, ampeg_delay=0, ampeg_attack=0.01, ampeg_sustain=1, ampeg_decay=0.01, ampeg_release=1,
             ampeg_vel2delay=0, ampeg_vel2attack=0, ampeg_vel2sustain=0, ampeg_vel2decay=0, ampeg_vel2release=0,
             ampeg_hold=0, ampeg_vel2hold=0 |
-            var envspec = Env(
-                levels:[0,0,ampeg_start,1,1,(ampeg_sustain+(ampeg_vel2sustain*amp))*0.01,0],
-                times:[ampeg_delay+(ampeg_vel2delay*amp), 0, ampeg_attack+(ampeg_vel2attack*amp), ampeg_hold+(ampeg_vel2hold*amp), ampeg_decay+(ampeg_vel2decay*amp), ampeg_release + (ampeg_vel2release*amp)],
-                curve:5);
+            var envspec = Env.dadsr(delayTime:(ampeg_delay + (ampeg_vel2delay*amp)),
+                attackTime:(ampeg_attack + (ampeg_vel2attack*amp)),
+                decayTime:(ampeg_decay + (ampeg_vel2decay*amp)),
+                sustainLevel:(ampeg_sustain + (ampeg_vel2sustain*amp)),
+                releaseTime:(ampeg_release + (ampeg_vel2release*amp))
+            );
             var env = EnvGen.ar(envspec, gate:gate, doneAction:Done.freeSelf);
             var sig = Pan2.ar(LoopBuf.ar(1,bufnum,BufRateScale.kr(bufnum)*rate,1,offset,stloop,endloop)*env*amp*volume.dbamp*xf, pan);
             Out.ar(out, sig);
@@ -391,10 +396,12 @@ SfzReader {
             ampeg_start=0, ampeg_delay=0, ampeg_attack=0.01, ampeg_sustain=1, ampeg_decay=0.01, ampeg_release=1,
             ampeg_vel2delay=0, ampeg_vel2attack=0, ampeg_vel2sustain=0, ampeg_vel2decay=0, ampeg_vel2release=0,
             ampeg_hold=0, ampeg_vel2hold=0 |
-            var envspec = Env(
-                levels:[0,0,ampeg_start,1,1,(ampeg_sustain+(ampeg_vel2sustain*amp))*0.01,0],
-                times:[ampeg_delay+(ampeg_vel2delay*amp), 0, ampeg_attack+(ampeg_vel2attack*amp), ampeg_hold+(ampeg_vel2hold*amp), ampeg_decay+(ampeg_vel2decay*amp), ampeg_release + (ampeg_vel2release*amp)],
-                curve:5);
+            var envspec = Env.dadsr(delayTime:(ampeg_delay + (ampeg_vel2delay*amp)),
+                attackTime:(ampeg_attack + (ampeg_vel2attack*amp)),
+                decayTime:(ampeg_decay + (ampeg_vel2decay*amp)),
+                sustainLevel:(ampeg_sustain + (ampeg_vel2sustain*amp)),
+                releaseTime:(ampeg_release + (ampeg_vel2release*amp))
+            );
             var env = EnvGen.ar(envspec, gate:gate, doneAction:Done.freeSelf);
             var bufplay = PlayBuf.ar(2,bufnum,BufRateScale.kr(bufnum)*rate,1,offset,0, 0)*env*amp*volume.dbamp*xf;
             var sig = Balance2.ar(bufplay[0], bufplay[1], pan);
@@ -407,10 +414,12 @@ SfzReader {
             ampeg_start=0, ampeg_delay=0, ampeg_attack=0.01, ampeg_sustain=1, ampeg_decay=0.01, ampeg_release=1,
             ampeg_vel2delay=0, ampeg_vel2attack=0, ampeg_vel2sustain=0, ampeg_vel2decay=0, ampeg_vel2release=0,
             ampeg_hold=0, ampeg_vel2hold=0 |
-            var envspec = Env(
-                levels:[0,0,ampeg_start,1,1,(ampeg_sustain+(ampeg_vel2sustain*amp))*0.01,0],
-                times:[ampeg_delay+(ampeg_vel2delay*amp), 0, ampeg_attack+(ampeg_vel2attack*amp), ampeg_hold+(ampeg_vel2hold*amp), ampeg_decay+(ampeg_vel2decay*amp), ampeg_release + (ampeg_vel2release*amp)],
-                curve:5);
+            var envspec = Env.dadsr(delayTime:(ampeg_delay + (ampeg_vel2delay*amp)),
+                attackTime:(ampeg_attack + (ampeg_vel2attack*amp)),
+                decayTime:(ampeg_decay + (ampeg_vel2decay*amp)),
+                sustainLevel:(ampeg_sustain + (ampeg_vel2sustain*amp)),
+                releaseTime:(ampeg_release + (ampeg_vel2release*amp))
+            );
             var env = EnvGen.ar(envspec, gate:gate, doneAction:Done.freeSelf);
             var bufplay = LoopBuf.ar(2,bufnum,BufRateScale.kr(bufnum)*rate,1,offset,stloop,endloop)*env*amp*volume.dbamp*xf;
             var sig = Balance2.ar(bufplay[0], bufplay[1], pan);
