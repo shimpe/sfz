@@ -43,9 +43,8 @@ SfzReader {
         this.pr_createSynthDefs;
         ("load buffers").postln;
         this.pr_loadBuffers(server);
-        ("sync").postln;
         server.sync;
-        this.buffers.debug("buffers");
+        this.buffers;
         ^this.filecontents;
     }
 
@@ -76,13 +75,20 @@ SfzReader {
             var ampeg_vel2decay = this.getProperty(masterid, groupid, regionid, \ampeg_vel2decay, 0).asFloat;
             var ampeg_vel2release = this.getProperty(masterid, groupid, regionid, \ampeg_vel2release, 0).asFloat;
             var ampeg_vel2hold = this.getProperty(masterid, groupid, regionid, \ampeg_vel2hold, 0).asFloat;
+            var volume = this.getProperty(masterid, groupid, regionid,\volume,0).asFloat;
 
             var chan = buf.numChannels;
 
-            var synth = Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
+            var synth;
+            var playOnRelease = this.getProperty(masterid, groupid, regionid, \trigger, "one-shot").compare("release") == 0;
+
+            if (playOnRelease.not) {
+                //"start one-shot".postln;
+               synth = Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
                 [\out, out,
                     \bufnum, buf.bufnum,
                     \amp, amp,
+                    \volume, volume,
                     \xf, this.pr_calcXf(masterid, groupid, regionid, freq, amp),
                     \gate, 1,
                     \pan, pan,
@@ -100,8 +106,41 @@ SfzReader {
                     \ampeg_vel2decay, ampeg_vel2decay,
                     \ampeg_vel2release, ampeg_vel2release,
                     \ampeg_vel2hold, ampeg_vel2hold]);
-            SystemClock.sched((dur*legato), { synth.set(\gate, 0); });
+            };
 
+            TempoClock.sched((dur*legato), {
+                if (playOnRelease.not) {
+                    //"stop one-shot".postln;
+                    synth.set(\gate, 0);
+                } {
+                    //"play on release".postln;
+                    synth = Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
+                        [\out, out,
+                            \bufnum, buf.bufnum,
+                            \amp, amp,
+                            \volume, volume,
+                            \xf, this.pr_calcXf(masterid, groupid, regionid, freq, amp),
+                            \gate, 1,
+                            \pan, pan,
+                            \ampeg_hold, (dur*legato),
+                            \rate, ((freq.cpsmidi)-(refnote.asInteger)).midiratio,
+                            \ampeg_start, ampeg_start,
+                            \ampeg_delay, ampeg_delay,
+                            \ampeg_attack, ampeg_attack,
+                            \ampeg_sustain, ampeg_sustain,
+                            \ampeg_decay, ampeg_decay,
+                            \ampeg_release, ampeg_release,
+                            \ampeg_vel2delay, ampeg_vel2delay,
+                            \ampeg_vel2attack, ampeg_vel2attack,
+                            \ampeg_vel2sustain, ampeg_vel2sustain,
+                            \ampeg_vel2decay, ampeg_vel2decay,
+                            \ampeg_vel2release, ampeg_vel2release,
+                            \ampeg_vel2hold, ampeg_vel2hold]);
+                    TempoClock.sched((buf.numFrames / buf.sampleRate), {
+                        //"stop on release".postln;
+                        synth.set(\gate, 0); } );
+                };
+            });
         });
     }
 
@@ -213,11 +252,13 @@ SfzReader {
                         var noteOk = false;
                         var sampleOk = false;
                         var buffnote = nil;
-                        if (vel.notNil && (velocity == vel)) {
-                            velOk = true;
+                        if (vel.notNil) {
+                            if (velocity == vel.asFloat) {
+                                velOk = true;
+                            };
                         } {
                             if (vel.isNil && hivel.notNil && lovel.notNil) {
-                                if ((velocity <= hivel) && (velocity >= lovel)) {
+                                if ((velocity <= hivel.asInteger) && (velocity >= lovel.asInteger)) {
                                     velOk = true;
                                 };
                             };
@@ -229,7 +270,7 @@ SfzReader {
                             };
                         } {
                             if (key.isNil && hikey.notNil && lokey.notNil) {
-                                if ((midinote.floor <= hikey) && (midinote.ceil >= lokey)) {
+                                if ((midinote.ceil.asInteger <= hikey.asInteger) && (midinote.floor.asInteger >= lokey.asInteger)) {
                                     noteOk = true;
                                     buffnote = pitch_keycenter ? 440.cpsmidi;
                                 };
@@ -445,6 +486,7 @@ SfzReader {
                             var buf;
                             samplepath = samplepath.replace("\\", "/");
                             buf = Buffer.read(server, (PathName(this.path).pathOnly +/+ samplepath).debug("Loading"));
+                            server.sync;
                             this.buffers[ (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol ] = buf;
                         };
                     });
