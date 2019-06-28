@@ -3,7 +3,7 @@
   summary: "sfz soundfont reader",
   version: "1.0",
   schelp: "sfz.schelp",
-  dependencies: ["https://github.com/shimpe/scstringext"],
+  dependencies: ["https://github.com/shimpe/scstringext", "https://github.com/shimpe/theoryquark"],
   license: "GNU GPL v3.0",
   copyright: "shimpe",
   ext_dependency: "",

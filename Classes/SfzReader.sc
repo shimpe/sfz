@@ -10,7 +10,6 @@ SfzReader {
     var <>synths;
     var <>buffers;
 
-
     *new {
         | id = "rdr" |
         ^super.new.init(id);
@@ -112,6 +111,7 @@ SfzReader {
                 if (playOnRelease.not) {
                     //"stop one-shot".postln;
                     synth.set(\gate, 0);
+                    nil;
                 } {
                     //"play on release".postln;
                     synth = Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
@@ -136,16 +136,20 @@ SfzReader {
                             \ampeg_vel2decay, ampeg_vel2decay,
                             \ampeg_vel2release, ampeg_vel2release,
                             \ampeg_vel2hold, ampeg_vel2hold]);
+
                     TempoClock.sched((buf.numFrames / buf.sampleRate), {
                         //"stop on release".postln;
-                        synth.set(\gate, 0); } );
+                        synth.set(\gate, 0); nil; } );
+
+                    nil;
                 };
             });
         });
     }
 
     getProperty {
-        | masterid, groupid, regionid, property, defaultifmissing=nil |
+        | masterid, groupid, regionid, property, defaultifmissing=nil, maybenote=false |
+        var returnvalue = defaultifmissing;
         masterid = masterid.asSymbol;
         groupid = groupid.asSymbol;
         regionid= regionid.asSymbol;
@@ -170,15 +174,23 @@ SfzReader {
         if (this.sfzdata[\0][masterid][groupid][regionid].isNil) {
             ^defaultifmissing;
         };
+        returnvalue = defaultifmissing;
         if (this.sfzdata[\0][masterid][groupid][regionid][property].isNil) {
             if (this.sfzdata[\0][masterid][groupid][\0][property].isNil) {
                 ^defaultifmissing;
             } {
-                ^this.sfzdata[\0][masterid][groupid][\0][property];
+                returnvalue = this.sfzdata[\0][masterid][groupid][\0][property];
             };
         } {
-            ^this.sfzdata[\0][masterid][groupid][regionid][property];
+            returnvalue = this.sfzdata[\0][masterid][groupid][regionid][property];
         };
+        if (maybenote) {
+            var theorynote = TheoryNoteParser();
+            if (theorynote.asMidi(returnvalue)[0].notNil) {
+                returnvalue = theorynote.asMidi(returnvalue)[0];
+            }
+        };
+        ^returnvalue;
     }
 
     listProperties {
@@ -208,10 +220,10 @@ SfzReader {
         var outlovel = this.getProperty(masterid, groupid, regionid, \xfout_lovel, nil);
         var outhivel = this.getProperty(masterid, groupid, regionid, \xfout_hivel, nil);
         var xfn = 1;
-        var inlokey = this.getProperty(masterid, groupid, regionid, \xfin_lokey, nil);
-        var inhikey = this.getProperty(masterid, groupid, regionid, \xfin_hikey, nil);
-        var outlokey = this.getProperty(masterid, groupid, regionid, \xfout_lokey, nil);
-        var outhikey = this.getProperty(masterid, groupid, regionid, \xfout_hikey, nil);
+        var inlokey = this.getProperty(masterid, groupid, regionid, \xfin_lokey, nil, true);
+        var inhikey = this.getProperty(masterid, groupid, regionid, \xfin_hikey, nil, true);
+        var outlokey = this.getProperty(masterid, groupid, regionid, \xfout_lokey, nil, true);
+        var outhikey = this.getProperty(masterid, groupid, regionid, \xfout_hikey, nil, true);
         if (inlovel.notNil && inhivel.notNil) {
             xfv = xfv*this.pr_eqPower(vel, inlovel, inhivel);
         };
@@ -244,10 +256,10 @@ SfzReader {
                         var vel = this.getProperty(masterid, groupid, regionid, \vel, nil);
                         var lovel = this.getProperty(masterid, groupid, regionid, \lovel, 0);
                         var hivel = this.getProperty(masterid, groupid, regionid, \hivel, 127);
-                        var key = this.getProperty(masterid, groupid, regionid, \key, nil);
-                        var lokey = this.getProperty(masterid, groupid, regionid, \lokey, nil);
-                        var hikey = this.getProperty(masterid, groupid, regionid, \hikey, nil);
-                        var pitch_keycenter = this.getProperty(masterid, groupid, regionid, \pitch_keycenter, nil);
+                        var key = this.getProperty(masterid, groupid, regionid, \key, nil, true);
+                        var lokey = this.getProperty(masterid, groupid, regionid, \lokey, nil, true);
+                        var hikey = this.getProperty(masterid, groupid, regionid, \hikey, nil, true);
+                        var pitch_keycenter = this.getProperty(masterid, groupid, regionid, \pitch_keycenter, nil, true);
                         var velOk = false;
                         var noteOk = false;
                         var sampleOk = false;
@@ -278,6 +290,7 @@ SfzReader {
                         };
                         if (noteOk.and(velOk)) {
                             var lookupkey = (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol;
+                            lookupkey.debug("active region");
                             if (this.getProperty(masterid, groupid, regionid, \sample, nil).notNil) {
                                 active_keys = active_keys.add([buffnote, lookupkey, [masterid, groupid, regionid]]);
                             };

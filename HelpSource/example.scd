@@ -6,7 +6,8 @@ s.reboot;
 s.waitForBoot({
     ~test = SfzReader();
     //~test.load(s, "/home/shimpe/documents/music/soundfonts/vpo/Virtual-Playing-Orchestra3/Woodwinds/flute-SOLO-sustain.sfz");
-    ~test.load(s, "/home/shimpe/documents/music/soundfonts/salamanderpiano/SalamanderGrandPianoV3_44.1khz16bit/SalamanderGrandPianoV3.sfz");
+    //~test.load(s, "/home/shimpe/documents/music/soundfonts/salamanderpiano/SalamanderGrandPianoV3_44.1khz16bit/SalamanderGrandPianoV3.sfz");
+    ~test.load(s, "/home/shimpe/documents/music/soundfonts/nobudget/sfz/melodica/Melodica/melodica.sfz");
     fork {
         // play some normal notes
         Panola("a4_8 b4 g4 c5 f4 g4 a4_4").midinotePattern.asStream.all.do({
