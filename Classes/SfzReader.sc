@@ -79,32 +79,32 @@ SfzReader {
             var chan = buf.numChannels;
 
             var synth;
-            var playOnRelease = this.getProperty(masterid, groupid, regionid, \trigger, "one-shot").compare("release") == 0;
+            var playOnRelease = this.getProperty(masterid, groupid, regionid, \trigger, "attack").compare("release") == 0;
 
             if (playOnRelease.not) {
                 //"start one-shot".postln;
-               synth = Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
-                [\out, out,
-                    \bufnum, buf.bufnum,
-                    \amp, amp,
-                    \volume, volume,
-                    \xf, this.pr_calcXf(masterid, groupid, regionid, freq, amp),
-                    \gate, 1,
-                    \pan, pan,
-                    \ampeg_hold, (dur*legato),
-                    \rate, ((freq.cpsmidi)-(refnote.asInteger)).midiratio,
-                    \ampeg_start, ampeg_start,
-                    \ampeg_delay, ampeg_delay,
-                    \ampeg_attack, ampeg_attack,
-                    \ampeg_sustain, ampeg_sustain,
-                    \ampeg_decay, ampeg_decay,
-                    \ampeg_release, ampeg_release,
-                    \ampeg_vel2delay, ampeg_vel2delay,
-                    \ampeg_vel2attack, ampeg_vel2attack,
-                    \ampeg_vel2sustain, ampeg_vel2sustain,
-                    \ampeg_vel2decay, ampeg_vel2decay,
-                    \ampeg_vel2release, ampeg_vel2release,
-                    \ampeg_vel2hold, ampeg_vel2hold]);
+                synth = Synth((this.id ++ "playbuf" ++ chan.clip(1,2)),
+                    [\out, out,
+                        \bufnum, buf.bufnum,
+                        \amp, amp,
+                        \volume, volume,
+                        \xf, this.pr_calcXf(masterid, groupid, regionid, freq, amp),
+                        \gate, 1,
+                        \pan, pan,
+                        \ampeg_hold, (dur*legato).debug("dur*legato"),
+                        \rate, ((freq.cpsmidi)-(refnote.asInteger)).midiratio,
+                        \ampeg_start, ampeg_start,
+                        \ampeg_delay, ampeg_delay,
+                        \ampeg_attack, ampeg_attack,
+                        \ampeg_sustain, ampeg_sustain,
+                        \ampeg_decay, ampeg_decay,
+                        \ampeg_release, ampeg_release,
+                        \ampeg_vel2delay, ampeg_vel2delay,
+                        \ampeg_vel2attack, ampeg_vel2attack,
+                        \ampeg_vel2sustain, ampeg_vel2sustain,
+                        \ampeg_vel2decay, ampeg_vel2decay,
+                        \ampeg_vel2release, ampeg_vel2release,
+                        \ampeg_vel2hold, ampeg_vel2hold]);
             };
 
             TempoClock.sched((dur*legato), {
@@ -140,8 +140,6 @@ SfzReader {
                     TempoClock.sched((buf.numFrames / buf.sampleRate), {
                         //"stop on release".postln;
                         synth.set(\gate, 0); nil; } );
-
-                    nil;
                 };
             });
         });
@@ -282,16 +280,27 @@ SfzReader {
                             };
                         } {
                             if (key.isNil && hikey.notNil && lokey.notNil) {
-                                if ((midinote.ceil.asInteger <= hikey.asInteger) && (midinote.floor.asInteger >= lokey.asInteger)) {
+                                if ((midinote.floor.asInteger <= hikey.asInteger) && (midinote.floor.asInteger >= lokey.asInteger)) {
                                     noteOk = true;
                                     buffnote = pitch_keycenter ? 440.cpsmidi;
                                 };
                             };
                         };
+
+                        /*
+                        hikey.postln("hikey");
+                        lokey.postln("lokey");
+                        pitch_keycenter.postln("pitch_keycenter");
+                        midinote.postln("midinote");
+                        velOk.debug("velOk");
+                        noteOk.debug("noteOk");
+                        */
+
                         if (noteOk.and(velOk)) {
                             var lookupkey = (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol;
-                            lookupkey.debug("active region");
                             if (this.getProperty(masterid, groupid, regionid, \sample, nil).notNil) {
+                                lookupkey.debug("active region");
+                                this.getProperty(masterid, groupid, regionid, \sample, nil).debug("sample");
                                 active_keys = active_keys.add([buffnote, lookupkey, [masterid, groupid, regionid]]);
                             };
                         };
@@ -497,10 +506,13 @@ SfzReader {
                         var samplepath = this.getProperty(masterid, groupid, regionid, \sample);
                         if (samplepath.notNil) {
                             var buf;
+                            var fullpath = (PathName(this.path).pathOnly +/+ samplepath);
+                            var key = (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol;
                             samplepath = samplepath.replace("\\", "/");
-                            buf = Buffer.read(server, (PathName(this.path).pathOnly +/+ samplepath).debug("Loading"));
+                            buf = Buffer.read(server, fullpath);
                             server.sync;
-                            this.buffers[ (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol ] = buf;
+                            this.buffers[key] = buf;
+                            ("Loading" + key ++ ": " ++ samplepath).postln;
                         };
                     });
                 });
