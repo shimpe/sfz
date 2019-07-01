@@ -241,7 +241,7 @@ SfzReader {
         | freq, amp |
         // todo extend with more parameters
         var velocity = (amp*127).clip(0,127);
-        var midinote = freq.cpsmidi;
+        var midinote = freq.cpsmidi.debug("requested midi note");
         var active_keys = [];
         this.sfzdata.keys.do({
             | globalid |
@@ -279,6 +279,12 @@ SfzReader {
                                 buffnote = key;
                             };
                         } {
+                            if (hikey.notNil && lokey.isNil) {
+                                lokey = 0;
+                            };
+                            if (lokey.notNil && hikey.isNil) {
+                                hikey = 127;
+                            };
                             if (key.isNil && hikey.notNil && lokey.notNil) {
                                 if ((midinote.floor.asInteger <= hikey.asInteger) && (midinote.floor.asInteger >= lokey.asInteger)) {
                                     noteOk = true;
@@ -287,14 +293,13 @@ SfzReader {
                             };
                         };
 
-                        /*
+
                         hikey.postln("hikey");
                         lokey.postln("lokey");
                         pitch_keycenter.postln("pitch_keycenter");
                         midinote.postln("midinote");
                         velOk.debug("velOk");
                         noteOk.debug("noteOk");
-                        */
 
                         if (noteOk.and(velOk)) {
                             var lookupkey = (masterid ++ "_" ++ groupid ++ "_" ++ regionid).asSymbol;
@@ -315,7 +320,35 @@ SfzReader {
         | path |
         this.path = path;
         this.filecontents = File.readAllString(path);
+        this.filecontents = this.pr_resolveIncludes(path, this.filecontents);
         ^this.filecontents;
+    }
+
+    pr_resolveIncludes {
+        | path, contents |
+        var localcontents = contents.copy();
+        var findincluderegex = "#include \"([a-zA-Z0-9.]+)\"[ \t]*[\r\n]*"; // with capture group
+        var replaceincluderegex = "#include \"[a-zA-Z0-9.]+\"[ \t]*[\r\n]*"; // no capture groups
+        while ({localcontents.findRegexp(findincluderegex) != [ ]}) {
+            var includefilename = localcontents.findRegexp(findincluderegex)[1][1];
+            var includefilecontents = File.readAllString((PathName(path).pathOnly +/+ includefilename).debug("include"));
+            var extrapath = "";
+            var controlregex = includefilecontents.findRegexp("<control>[^<]*");
+            if (controlregex != [ ]) {
+                var controlsection = controlregex[0][1];
+                var defaultpathregex = "default_path=([^ \t\r\n]+)";
+                var defaultpathproperty;
+                controlsection = controlsection.replace("<control>", "");
+                defaultpathproperty = controlsection.findRegexp(defaultpathregex);
+                if (defaultpathproperty != [ ]) {
+                    extrapath = defaultpathproperty[1][1].replace("\\","/");
+                };
+                includefilecontents = includefilecontents.replaceRegex("<control>[^<]*", ""); // and remove rest of control section (not supported)
+                includefilecontents = includefilecontents.replaceRegex("sample=","sample="++extrapath); // only take into account default_path
+            };
+            localcontents = localcontents.replaceRegex(replaceincluderegex, includefilecontents, 0);
+        };
+        ^localcontents;
     }
 
     pr_removeComments {
